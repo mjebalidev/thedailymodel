@@ -174,15 +174,56 @@ The pipeline is intentionally provider-agnostic:
 Frontend → **Vercel** (free tier), backend → **Coolify** on a **Hetzner VPS**.
 Both auto-deploy on `git push`.
 
-```
-        git push
-           │
-   ┌───────┴────────┐
-   ▼                ▼
- Vercel           Coolify (Hetzner)
- frontend/        backend/  (Docker)
- static SPA  ──▶  https://api.example.com
- VITE_API_BASE_URL ────────────┘  (CORS-allowed)
+```mermaid
+flowchart TB
+    subgraph CI["⏰ CI — GitHub / Forgejo Actions (daily cron 06:00 UTC)"]
+        cron["daily-edition.yml
+POST /api/pipeline/trigger
+header X-Trigger-Secret"]
+    end
+
+    subgraph BACK["🐍 Backend — FastAPI + uv · Docker on Coolify (Hetzner VPS)"]
+        api["REST API
+/api/pipeline · /api/editions"]
+        subgraph PIPE["Daily pipeline (idempotent per date)"]
+            d["1 · Discovery
+RSS feeds + DuckDuckGo search
+48 h window, max 40 candidates"]
+            r["2 · Relevance agent
+score 0–100, drop &lt; 50"]
+            s["3 · Scraper
+full text (best-effort)"]
+            a["4 · Analysis agent
+category · importance · summary"]
+            e["5 · Editorial agent
+title + intro, max 12 articles"]
+            t["6 · Translation agent
+EN → FR / DE"]
+        end
+        db[("SQLite — /data volume
+editions · articles · i18n_json")]
+    end
+
+    subgraph LLM["✨ LLM — Gemini free tier"]
+        chain["Fallback chain
+gemini-flash-latest → gemini-flash-lite-latest
+→ deterministic mock if all fail"]
+    end
+
+    subgraph FRONT["⚛️ Frontend — React + TypeScript + Vite · Vercel"]
+        spa["Static SPA (read-only)
+EN/FR/DE · themes · archive"]
+    end
+
+    cron -- "secured trigger + /status polling" --> api
+    api --> d --> r --> s --> a --> e --> t
+    t -- "persist (replaces the day's edition)" --> db
+    r -.-> chain
+    a -.-> chain
+    e -.-> chain
+    t -.-> chain
+    spa -- "GET /api/editions (CORS)" --> api
+    db --> api
 ```
 
 ### Frontend on Vercel
