@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 7am on saturday"],
+  "labels": ["renovate"],
+  "prConcurrentLimit": 5,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 7am on the first day of the month"]
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "groupName": "patch updates",
+      "automerge": true,
+      "platformAutomerge": false
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "groupName": "minor updates"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "labels": ["renovate", "major"]
+    }
+  ],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"]
+  }
+}
