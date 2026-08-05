@@ -1,0 +1,16 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+backend/ai_news.db
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+*.tsbuildinfo
+
+# Misc
+.DS_Store
+*.log

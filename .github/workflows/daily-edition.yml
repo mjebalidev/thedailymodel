@@ -1,0 +1,80 @@
+name: Daily Edition
+
+# Triggers the AI-news pipeline on the deployed backend.
+#  - schedule:         one edition every morning
+#  - workflow_dispatch: manual "Run workflow" button (with optional date)
+#
+# Required repository secrets:
+#   API_BASE_URL    e.g. https://api.example.com   (no trailing slash)
+#   TRIGGER_SECRET  same value as the backend's TRIGGER_SECRET env var
+#
+# Note: identical syntax runs on GitHub Actions and Forgejo/Gitea Actions.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Edition date (YYYY-MM-DD, optional — defaults to today UTC)"
+        required: false
+        default: ""
+
+concurrency:
+  group: daily-edition
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    # Secrets API_BASE_URL / TRIGGER_SECRET live in the "Production" environment.
+    environment: Production
+    timeout-minutes: 15
+    steps:
+      - name: Trigger pipeline
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          TRIGGER_SECRET: ${{ secrets.TRIGGER_SECRET }}
+          DATE_INPUT: ${{ github.event.inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_BASE_URL:-}" ]; then
+            echo "::error::Repository secret API_BASE_URL is not set (e.g. https://api.example.com)."
+            exit 1
+          fi
+          if [ -z "${TRIGGER_SECRET:-}" ]; then
+            echo "::error::Repository secret TRIGGER_SECRET is not set (must match the backend env)."
+            exit 1
+          fi
+          base="${API_BASE_URL%/}"
+          url="${base}/api/pipeline/trigger"
+          if [ -n "${DATE_INPUT:-}" ]; then
+            url="${url}?date=${DATE_INPUT}"
+          fi
+          echo "POST ${url}"
+          # -f makes curl fail on 401 (bad secret) / 5xx.
+          curl -fsS -X POST "${url}" -H "X-Trigger-Secret: ${TRIGGER_SECRET}"
+          echo
+
+      - name: Wait for completion
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_BASE_URL:-}" ]; then
+            echo "::error::Repository secret API_BASE_URL is not set."
+            exit 1
+          fi
+          status_url="${API_BASE_URL%/}/api/pipeline/status"
+          for i in $(seq 1 60); do
+            body=$(curl -fsS "${status_url}")
+            state=$(printf '%s' "$body" | sed -n 's/.*"status" *: *"\([a-z]*\)".*/\1/p')
+            echo "poll ${i}: ${state}"
+            case "${state}" in
+              done)  echo "${body}"; exit 0 ;;
+              error) echo "Pipeline reported an error: ${body}"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "Timed out waiting for the pipeline to finish."
+          exit 1
