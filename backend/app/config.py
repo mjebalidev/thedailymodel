@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Storage / server
     database_url: str = "sqlite:///./ai_news.db"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Editions older than this many days are purged after each run (0 = keep all).
+    retention_days: int = 365
 
     @property
     def cors_origin_list(self) -> list[str]:

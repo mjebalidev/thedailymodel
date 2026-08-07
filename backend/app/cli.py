@@ -6,6 +6,9 @@
     uv run python -m app.cli discover [--scrape] [--web-only] [--json PATH]
         Run ONLY discovery (+ optional scraping) and print what the research
         agent found — to inspect relevance/veracity of the collected data.
+
+    uv run python -m app.cli cleanup [--days N]
+        Purge editions older than the retention window (RETENTION_DAYS).
 """
 
 from __future__ import annotations
@@ -15,10 +18,12 @@ import json
 
 from sqlmodel import Session
 
+from datetime import datetime, timezone
+
 from .db import engine, init_db
 from .pipeline import discovery, relevance, scraper
 from .pipeline.llm import get_llm
-from .pipeline.orchestrator import run_pipeline
+from .pipeline.orchestrator import purge_old_editions, run_pipeline
 
 
 def _cmd_generate(args: argparse.Namespace) -> None:
@@ -88,6 +93,20 @@ def _cmd_discover(args: argparse.Namespace) -> None:
         print(f"\n→ Full data written to {args.json}")
 
 
+def _cmd_cleanup(args: argparse.Namespace) -> None:
+    from .config import settings
+
+    init_db()
+    today = datetime.now(timezone.utc).date().isoformat()
+    days = settings.retention_days if args.days is None else args.days
+    with Session(engine) as session:
+        n = purge_old_editions(session, today, days=args.days)
+    if days <= 0:
+        print("Retention disabled (days <= 0) — nothing purged.")
+    else:
+        print(f"✓ Purged {n} edition(s) older than {days} days.")
+
+
 def _cmd_models(args: argparse.Namespace) -> None:
     """List the Gemini models the configured API key can actually use."""
     from .config import settings
@@ -134,6 +153,12 @@ def main() -> None:
     )
     p_disc.add_argument("--json", metavar="PATH", help="Also dump full candidate data as JSON.")
     p_disc.set_defaults(func=_cmd_discover)
+
+    p_clean = sub.add_parser("cleanup", help="Purge editions older than the retention window.")
+    p_clean.add_argument(
+        "--days", type=int, default=None, help="Override RETENTION_DAYS (0 = disabled)."
+    )
+    p_clean.set_defaults(func=_cmd_cleanup)
 
     p_models = sub.add_parser("models", help="List Gemini models available to your API key.")
     p_models.set_defaults(func=_cmd_models)

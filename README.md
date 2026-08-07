@@ -168,6 +168,9 @@ The pipeline is intentionally provider-agnostic:
   pages → LLM-ready markdown) in `scraper.py`.
 - **Tune coverage** — `LOOKBACK_HOURS`, `MAX_CANDIDATES`, `MAX_ARTICLES` in `.env`.
 - **Add/remove sources** — edit `RSS_FEEDS` in `app/pipeline/sources.py`.
+- **Bound the archive** — `RETENTION_DAYS` (default 365, `0` = keep everything):
+  editions older than the window are purged after each run. Manual purge:
+  `uv run python -m app.cli cleanup [--days N]`.
 
 ## Deployment (Vercel + Coolify/Hetzner)
 
@@ -199,6 +202,8 @@ category · importance · summary"]
 title + intro, max 12 articles"]
             t["6 · Translation agent
 EN → FR / DE"]
+            ret["7 · Retention
+purge editions &gt; RETENTION_DAYS"]
         end
         db[("SQLite — /data volume
 editions · articles · i18n_json")]
@@ -216,8 +221,9 @@ EN/FR/DE · themes · archive"]
     end
 
     cron -- "secured trigger + /status polling" --> api
-    api --> d --> r --> s --> a --> e --> t
+    api --> d --> r --> s --> a --> e --> t --> ret
     t -- "persist (replaces the day's edition)" --> db
+    ret -- "delete old editions + articles" --> db
     r -.-> chain
     a -.-> chain
     e -.-> chain

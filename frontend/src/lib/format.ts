@@ -21,6 +21,13 @@ export function formatShortDate(iso: string): string {
   });
 }
 
+export function formatMonthYear(isoMonth: string, locale = "en-US"): string {
+  // isoMonth is "YYYY-MM"
+  const [y, m] = isoMonth.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, 1));
+  return date.toLocaleDateString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
 export function hostname(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");

@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from ..config import settings
 from ..db import get_session
-from ..models import Edition
+from ..models import Article, Edition
 from ..schemas import ArticleOut, EditionOut, EditionSummary, SourceOut
 
 router = APIRouter(prefix="/api/editions", tags=["editions"])
@@ -21,7 +21,7 @@ def _available_languages(e: Edition) -> list[str]:
     return [settings.base_language, *_edition_i18n(e).keys()]
 
 
-def _to_summary(e: Edition, lang: str) -> EditionSummary:
+def _to_summary(e: Edition, lang: str, article_count: int | None = None) -> EditionSummary:
     tr = _edition_i18n(e).get(lang, {})
     return EditionSummary(
         id=e.id,
@@ -30,7 +30,7 @@ def _to_summary(e: Edition, lang: str) -> EditionSummary:
         intro=tr.get("intro") or e.intro,
         status=e.status,
         model=e.model,
-        article_count=len(e.articles),
+        article_count=len(e.articles) if article_count is None else article_count,
     )
 
 
@@ -64,8 +64,15 @@ def list_editions(
     session: Session = Depends(get_session),
 ) -> list[EditionSummary]:
     lang = (lang or settings.base_language).lower()
+    # One aggregate query for the counts — avoids lazy-loading every edition's
+    # articles (N+1) as the archive grows.
+    counts = dict(
+        session.exec(
+            select(Article.edition_id, func.count(Article.id)).group_by(Article.edition_id)
+        ).all()
+    )
     editions = session.exec(select(Edition).order_by(Edition.date.desc())).all()
-    return [_to_summary(e, lang) for e in editions]
+    return [_to_summary(e, lang, counts.get(e.id, 0)) for e in editions]
 
 
 @router.get("/latest", response_model=EditionOut)

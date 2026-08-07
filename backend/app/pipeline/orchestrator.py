@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
@@ -19,7 +19,11 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
 
     Idempotent per day: re-running for the same date replaces that edition.
     """
-    date_str = date_str or datetime.now(timezone.utc).date().isoformat()
+    # Normalize (and validate) the requested date up front — a malformed date
+    # would otherwise produce a bogus edition and break retention math.
+    date_str = date.fromisoformat(
+        date_str or datetime.now(timezone.utc).date().isoformat()
+    ).isoformat()
     log.info("=== Pipeline start for %s ===", date_str)
 
     llm = get_llm()
@@ -81,6 +85,11 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
     session.commit()
     session.refresh(edition)
 
+    # 7. Retention — keep the archive (and the DB) bounded.
+    purged = purge_old_editions(session, date_str)
+    if purged:
+        log.info("retention: purged %d edition(s) older than %d days", purged, settings.retention_days)
+
     log.info(
         "=== Pipeline done for %s: %d articles from %d candidates (%s) ===",
         date_str,
@@ -89,3 +98,21 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
         model_label,
     )
     return edition
+
+
+def purge_old_editions(session: Session, today: str, days: int | None = None) -> int:
+    """Delete editions dated more than `days` before `today` (0/negative = keep all).
+
+    Articles are removed with their edition via the relationship cascade.
+    Returns the number of editions purged.
+    """
+    days = settings.retention_days if days is None else days
+    if days <= 0:
+        return 0
+    cutoff = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
+    old = session.exec(select(Edition).where(Edition.date < cutoff)).all()
+    for e in old:
+        session.delete(e)
+    if old:
+        session.commit()
+    return len(old)
