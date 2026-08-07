@@ -82,7 +82,7 @@ mock** so an edition is always produced. `Edition.model` records what actually r
 | Analysis    | `app/pipeline/analysis.py`            | LLM selects / clusters / categorizes / ranks stories (heuristic in mock). |
 | Editorial   | `app/pipeline/editorial.py`           | LLM writes the masthead intro + each article body (templated in mock). |
 | Translation | `app/pipeline/translation.py`         | Agent translates the edition into the non-base languages (no-op in mock). |
-| Persist     | `app/pipeline/orchestrator.py`        | Saves one `Edition` (+ `Article`s, + i18n) per day, idempotently. |
+| Persist     | `app/pipeline/orchestrator.py`        | Saves one `Edition` (+ `Article`s, + i18n) per day, idempotently; then purges editions older than `RETENTION_DAYS`. |
 | Display     | `frontend/src/`                       | Fetches `/api/editions/*?lang=` and renders the newspaper. |
 
 ## Triggering the pipeline
@@ -175,6 +175,21 @@ The pipeline is intentionally provider-agnostic:
   editions older than the window are purged after each run. Manual purge:
   `uv run python -m app.cli cleanup [--days N]`.
 
+## Development & CI
+
+```bash
+make lint   # ruff over the backend
+make test   # pytest suite (backend/tests/)
+```
+
+The test suite covers the retention purge, the editions API (ordering, counts,
+i18n fallback), the LLM fallback-chain semantics (dead-model skip, transient
+retry, exhaustion), trigger authentication and error sanitization — all against
+a throwaway SQLite database, no network or API key needed.
+
+CI (`.github/workflows/ci.yml`) runs ruff + pytest and type-checks/builds the
+frontend on every push and PR; **Renovate** keeps dependencies current.
+
 ## Deployment (Vercel + Coolify/Hetzner)
 
 Frontend → **Vercel** (free tier), backend → **Coolify** on a **Hetzner VPS**.
@@ -248,6 +263,9 @@ EN/FR/DE · themes · archive"]
 2. Exposed port: **8000**.
 3. **Persistent storage** — mount a volume at **`/data`** so the SQLite DB survives
    redeploys (the Dockerfile already sets `DATABASE_URL=sqlite:////data/ai_news.db`).
+   The container runs as a **non-root user (uid 1000)**: a named/managed volume
+   inherits the right ownership from the image, but if you bind-mount a host
+   directory, `chown -R 1000` it first.
 4. Environment variables:
    ```env
    USE_MOCK_LLM=false
@@ -291,6 +309,5 @@ reports `done` (fails the job on `error`/timeout).
 | GET    | `/api/editions?lang=`         | List all editions (summaries)  |
 | GET    | `/api/editions/latest?lang=`  | Latest full edition            |
 | GET    | `/api/editions/{YYYY-MM-DD}?lang=` | A specific edition (lang: en/fr/de) |
-| POST   | `/api/pipeline/trigger`       | Start a generation run         |
+| POST   | `/api/pipeline/trigger`       | Start a generation run (`X-Trigger-Secret` header) |
 | GET    | `/api/pipeline/status`        | Progress of the current run    |
-```
