@@ -46,9 +46,9 @@ export default function App() {
   useEffect(() => {
     setFilter(null);
     if (edition) {
-      document.title = `${edition.title || "The Daily Model"} — ${formatLongDate(edition.date)}`;
+      document.title = `${edition.title || "The Daily Model"} — ${formatLongDate(edition.date, lang)}`;
     }
-  }, [edition]);
+  }, [edition, lang]);
 
   const articles = edition?.articles ?? [];
   const present = new Set(articles.map((a) => a.category));

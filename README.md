@@ -1,5 +1,8 @@
 # 📰 The Daily Model — AI News
 
+[![CI](https://github.com/mjebalidev/thedailymodel/actions/workflows/ci.yml/badge.svg)](https://github.com/mjebalidev/thedailymodel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An automated **daily newspaper about AI**. A research agent discovers fresh AI
 news, an LLM analyzes and clusters it, then writes a journalistic edition that is
 served through a classic newspaper-style web UI.
@@ -179,7 +182,7 @@ Both auto-deploy on `git push`.
 
 ```mermaid
 flowchart TB
-    subgraph CI["⏰ CI — GitHub / Forgejo Actions (daily cron 06:00 UTC)"]
+    subgraph CI["⏰ CI — GitHub / Forgejo Actions (daily cron 04:00 UTC)"]
         cron["daily-edition.yml
 POST /api/pipeline/trigger
 header X-Trigger-Secret"]
@@ -264,7 +267,7 @@ EN/FR/DE · themes · archive"]
 Generation is driven by `.github/workflows/daily-edition.yml` (works on GitHub
 Actions and Forgejo/Gitea Actions):
 
-- **Scheduled** — daily `cron` (default 06:00 UTC).
+- **Scheduled** — daily `cron` (default 04:00 UTC).
 - **Manual** — the **Run workflow** button (`workflow_dispatch`), with an optional date.
 
 Add two secrets to the repo (Settings → Secrets and variables → Actions):

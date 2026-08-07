@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Trigger / scheduler
     trigger_secret: str = ""
     enable_scheduler: bool = False
-    daily_cron_hour: int = 6
+    daily_cron_hour: int = 4
     daily_cron_minute: int = 0
 
     # Storage / server

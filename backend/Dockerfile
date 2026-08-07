@@ -18,7 +18,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # 2) Copy the app.
 COPY . .
 
-RUN mkdir -p /data
+# Run as a non-root user; /data must stay writable (SQLite volume).
+RUN useradd --system --create-home --uid 1000 appuser \
+    && mkdir -p /data \
+    && chown -R appuser:appuser /app /data
+USER appuser
 
 EXPOSE 8000
 

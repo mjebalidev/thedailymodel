@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function Footer({ edition, issueNo }: Props) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   return (
     <footer className="mt-12 border-t-4 border-double border-[var(--ink)] pt-4 pb-8 text-center">
       <p className="masthead-title !text-2xl !whitespace-normal font-black mb-2">The Daily Model</p>
@@ -22,7 +22,7 @@ export function Footer({ edition, issueNo }: Props) {
               <span aria-hidden>·</span>
             </>
           )}
-          <span>{formatLongDate(edition.date)}</span>
+          <span>{formatLongDate(edition.date, lang)}</span>
           <span aria-hidden>·</span>
           <span>
             {edition.article_count} {t("dispatches")}

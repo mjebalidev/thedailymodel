@@ -1,4 +1,4 @@
-.PHONY: install backend frontend dev generate
+.PHONY: install backend frontend dev generate lint test
 
 install:
 	cd backend && uv sync
@@ -15,3 +15,10 @@ frontend:
 # Generate one edition from the command line (no server needed)
 generate:
 	cd backend && uv run python -m app.cli generate
+
+# What CI runs: ruff on the backend, pytest suite
+lint:
+	cd backend && uv run ruff check .
+
+test:
+	cd backend && uv run pytest

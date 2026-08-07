@@ -58,7 +58,7 @@ export function ArchiveBar({ editions, currentDate, onSelect }: Props) {
                   : "border-transparent text-[var(--ink)] hover:text-[var(--accent)]"
               }`}
             >
-              {formatShortDate(e.date)}
+              {formatShortDate(e.date, lang)}
             </button>
           );
         })}
@@ -80,7 +80,7 @@ export function ArchiveBar({ editions, currentDate, onSelect }: Props) {
               <optgroup key={month} label={formatMonthYear(month, lang)}>
                 {items.map((e) => (
                   <option key={e.id} value={e.date}>
-                    {formatShortDate(e.date)}
+                    {formatShortDate(e.date, lang)}
                   </option>
                 ))}
               </optgroup>

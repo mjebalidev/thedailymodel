@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function Masthead({ date, subtitle, model, theme, onCycleTheme }: Props) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [condensed, setCondensed] = useState(false);
   const isDraft = model === "mock";
@@ -42,7 +42,7 @@ export function Masthead({ date, subtitle, model, theme, onCycleTheme }: Props) 
         <span className="masthead-title !text-xl font-black">The Daily Model</span>
         <div className="flex items-center gap-2">
           <span className="hidden md:block kicker text-[10px] text-[var(--muted)]">
-            {date ? formatLongDate(date) : ""}
+            {date ? formatLongDate(date, lang) : ""}
           </span>
           <LanguageSwitcher />
           <ThemeToggle theme={theme} onCycle={onCycleTheme} />
@@ -51,7 +51,7 @@ export function Masthead({ date, subtitle, model, theme, onCycleTheme }: Props) 
 
       <header className="border-b-4 border-double border-[var(--ink)] pb-2 mb-4 sm:pb-3 sm:mb-6">
         <div className="flex items-center justify-between gap-2 text-xs kicker text-[var(--muted)] pb-2">
-          <span className="truncate max-w-[40vw]">{date ? formatLongDate(date) : "—"}</span>
+          <span className="truncate max-w-[40vw]">{date ? formatLongDate(date, lang) : "—"}</span>
           <span className="hidden lg:block">{t("autonomousDesk")}</span>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />

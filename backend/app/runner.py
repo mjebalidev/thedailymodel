@@ -48,12 +48,14 @@ def _worker(date_str: str | None) -> None:
                 model=edition.model,
                 detail="Edition generated.",
             )
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         log.exception("pipeline run failed")
+        # The status endpoint is public: expose the error class only, never the
+        # raw message (it may carry internal paths, provider responses, etc.).
         _state.update(
             status="error",
             finished_at=datetime.now(timezone.utc).isoformat(),
-            detail=str(exc),
+            detail=f"Pipeline failed ({type(exc).__name__}) — see server logs.",
         )
 
 

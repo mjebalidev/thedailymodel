@@ -1,8 +1,8 @@
-export function formatLongDate(iso: string): string {
+export function formatLongDate(iso: string, locale = "en-US"): string {
   // iso is "YYYY-MM-DD"
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale, {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -11,10 +11,10 @@ export function formatLongDate(iso: string): string {
   });
 }
 
-export function formatShortDate(iso: string): string {
+export function formatShortDate(iso: string, locale = "en-US"): string {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     timeZone: "UTC",
