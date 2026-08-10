@@ -1,7 +1,10 @@
 # 📰 The Daily Model — AI News
 
+[![Live demo](https://img.shields.io/badge/live%20demo-dailymodel.jsvi.tech-c8102e)](https://dailymodel.jsvi.tech)
 [![CI](https://github.com/mjebalidev/thedailymodel/actions/workflows/ci.yml/badge.svg)](https://github.com/mjebalidev/thedailymodel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+**Live:** [dailymodel.jsvi.tech](https://dailymodel.jsvi.tech)
 
 An automated **daily newspaper about AI**. A research agent discovers fresh AI
 news, an LLM analyzes and clusters it, then writes a journalistic edition that is

@@ -34,6 +34,16 @@ export function Footer({ edition, issueNo }: Props) {
         </p>
       ) : null}
       <p className="kicker text-[10px] text-[var(--muted)] mt-2">{t("footerTagline")}</p>
+      <p className="kicker text-[10px] mt-2">
+        <a
+          href="https://github.com/mjebalidev/thedailymodel"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--muted)] underline underline-offset-2 hover:text-[var(--accent)] transition-colors"
+        >
+          {t("viewSource")}
+        </a>
+      </p>
     </footer>
   );
 }
