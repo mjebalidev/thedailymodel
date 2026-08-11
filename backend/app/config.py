@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     max_candidates: int = 40
     max_articles: int = 12
     enable_web_search: bool = True
+    # Comma-separated ddgs news backends queried per web-search query. Using
+    # several makes discovery resilient: if one engine is throttled from the
+    # datacenter IP, the others still return results for that run.
+    web_search_backends: str = "duckduckgo, bing, yahoo"
 
     # Relevance filter ("noise elimination" agent)
     enable_relevance_filter: bool = True

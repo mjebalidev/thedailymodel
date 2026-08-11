@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, urlunparse
 
 import feedparser
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..config import settings
 from .sources import RSS_FEEDS, WEB_SEARCH_QUERIES
@@ -70,6 +71,28 @@ def _from_rss() -> list[Candidate]:
     return out
 
 
+@retry(reraise=True, stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _search_one(ddgs, query: str) -> list[dict]:
+    """Run one query across several news backends, retrying transient throttles.
+
+    Querying multiple backends (config.web_search_backends) means a single
+    engine being rate-limited from the datacenter IP no longer zeros out the
+    run. An empty result set is treated as a transient throttle and retried a
+    couple of times with backoff — this is the '1 result then it recovers'
+    failure mode. Falls back to text search if the news endpoint errors out.
+    """
+    backends = settings.web_search_backends
+    try:
+        results = ddgs.news(
+            query, region="wt-wt", timelimit="d", max_results=15, backend=backends
+        )
+    except Exception:
+        results = ddgs.text(query, timelimit="d", max_results=15, backend=backends)
+    if not results:
+        raise RuntimeError(f"empty web-search result for {query!r} (likely throttled)")
+    return results
+
+
 def _from_web_search() -> list[Candidate]:
     if not settings.enable_web_search:
         return []
@@ -80,39 +103,36 @@ def _from_web_search() -> list[Candidate]:
         return []
 
     out: list[Candidate] = []
-    try:
-        with DDGS() as ddgs:
-            for query in WEB_SEARCH_QUERIES:
-                try:
-                    results = ddgs.news(query, region="wt-wt", timelimit="d", max_results=15)
-                except Exception:
-                    # Fall back to text search if the news endpoint misbehaves.
-                    results = ddgs.text(query, timelimit="d", max_results=15)
-                for r in results:
-                    url = r.get("url") or r.get("href")
-                    title = r.get("title")
-                    if not url or not title:
-                        continue
-                    published = None
-                    if r.get("date"):
-                        try:
-                            published = datetime.fromisoformat(
-                                str(r["date"]).replace("Z", "+00:00")
-                            )
-                        except Exception:
-                            published = None
-                    out.append(
-                        Candidate(
-                            title=_clean(title),
-                            url=url,
-                            publisher=_clean(r.get("source", "Web")),
-                            origin="web",
-                            snippet=_clean(r.get("body", "")),
-                            published=published,
+    with DDGS() as ddgs:
+        for query in WEB_SEARCH_QUERIES:
+            try:
+                results = _search_one(ddgs, query)
+            except Exception as exc:  # pragma: no cover - network variability
+                log.warning("web search failed for %r after retries: %s", query, exc)
+                continue
+            for r in results:
+                url = r.get("url") or r.get("href")
+                title = r.get("title")
+                if not url or not title:
+                    continue
+                published = None
+                if r.get("date"):
+                    try:
+                        published = datetime.fromisoformat(
+                            str(r["date"]).replace("Z", "+00:00")
                         )
+                    except Exception:
+                        published = None
+                out.append(
+                    Candidate(
+                        title=_clean(title),
+                        url=url,
+                        publisher=_clean(r.get("source", "Web")),
+                        origin="web",
+                        snippet=_clean(r.get("body", "")),
+                        published=published,
                     )
-    except Exception as exc:  # pragma: no cover - network variability
-        log.warning("web search failed: %s", exc)
+                )
     log.info("Web search discovery: %d raw entries", len(out))
     return out
 
