@@ -26,6 +26,11 @@ class _TransientError(Exception):
     """Temporary failure (rate limit / 5xx / overloaded) — retry, then try next model."""
 
 
+class _DailyQuotaExhausted(Exception):
+    """Per-day quota is gone until the provider's daily reset — no retry can
+    succeed within this run, so the model is skipped for the rest of it."""
+
+
 # Substrings used to classify provider errors when a status code isn't exposed.
 _UNAVAILABLE_HINTS = (
     "not found", "404", "does not exist", "not supported", "permission",
@@ -37,29 +42,39 @@ _TRANSIENT_HINTS = (
 )
 
 
+def _is_daily_quota(msg: str) -> bool:
+    """Gemini per-day quota violations carry a quotaId like
+    GenerateRequestsPerDayPerProjectPerModel-FreeTier; per-minute ones say PerMinute."""
+    return "perday" in msg
+
+
 def _classify(exc: Exception) -> Exception:
-    """Map a provider exception to _ModelUnavailable / _TransientError / LLMError."""
+    """Map a provider exception to _ModelUnavailable / _DailyQuotaExhausted /
+    _TransientError. Unknown errors count as transient so the chain falls through."""
+    msg = str(exc).lower()
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     if code in (404, 403, 400):
         return _ModelUnavailable(str(exc))
+    if code == 429 and _is_daily_quota(msg):
+        return _DailyQuotaExhausted(str(exc))
     if code in (429, 500, 502, 503, 504):
         return _TransientError(str(exc))
 
-    msg = str(exc).lower()
     if any(h in msg for h in _UNAVAILABLE_HINTS):
         return _ModelUnavailable(str(exc))
     if any(h in msg for h in _TRANSIENT_HINTS):
+        if _is_daily_quota(msg):
+            return _DailyQuotaExhausted(str(exc))
         return _TransientError(str(exc))
-    # Unknown: treat as transient-ish so we still fall through to the next model.
     return _TransientError(str(exc))
 
 
 class GeminiLLM:
     """google-genai wrapper with structured output and a model fallback chain.
 
-    Tries models in order (smartest → most available). A model that is missing
-    or access-denied is skipped for the rest of the process; transient errors
-    are retried a few times, then the next model is tried. Once every model has
+    Tries models in order (smartest → most available). A model that is missing,
+    access-denied or out of daily quota is skipped for the rest of the process;
+    transient errors are retried a few times, then the next model is tried. Once every model has
     failed, raises LLMError so the caller can fall back to the deterministic mock.
     """
 
@@ -68,10 +83,10 @@ class GeminiLLM:
 
         self._client = genai.Client(api_key=api_key)
         self._models = models or ["gemini-flash-latest"]
-        # Individually-dead models (404 / no access). A transient failure (429)
-        # on a working model must NOT disqualify it — only real unavailability
-        # marks a specific model dead, so a good model is never skipped because
-        # a *different* model later in the chain is missing.
+        # Individually-dead models: 404 / no access, or per-DAY quota exhausted
+        # (dead until the provider's daily reset, i.e. for this whole process).
+        # A per-minute 429 on a working model must NOT disqualify it, and a good
+        # model is never skipped because a *different* model in the chain is dead.
         self._dead: set[str] = set()
         self._last_error: str = ""  # real reason of the most recent failure
         self.last_model: str = ""  # the model that produced the most recent success
@@ -117,6 +132,13 @@ class GeminiLLM:
             except _ModelUnavailable as exc:
                 log.warning("LLM: model %s unavailable, skipping permanently: %r", model, exc)
                 self._dead.add(model)  # only THIS model, not the ones before it
+                self._last_error = f"{model}: {exc}"
+            except _DailyQuotaExhausted as exc:
+                log.warning(
+                    "LLM: model %s daily quota exhausted, skipping for this run: %r",
+                    model, exc,
+                )
+                self._dead.add(model)
                 self._last_error = f"{model}: {exc}"
             except _TransientError as exc:
                 # Transient (429/5xx): try the next model for THIS call, but keep

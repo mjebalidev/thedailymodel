@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     # Secrets API_BASE_URL / TRIGGER_SECRET live in the "Production" environment.
     environment: Production
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - name: Trigger pipeline
         env:
@@ -65,8 +65,10 @@ jobs:
             echo "::error::Repository secret API_BASE_URL is not set."
             exit 1
           fi
+          # 180 polls x 10s = 30 min: a free-tier daily-quota fallback run can
+          # take ~29 min (each LLM call retries the dead model before falling back).
           status_url="${API_BASE_URL%/}/api/pipeline/status"
-          for i in $(seq 1 60); do
+          for i in $(seq 1 180); do
             body=$(curl -fsS "${status_url}")
             state=$(printf '%s' "$body" | sed -n 's/.*"status" *: *"\([a-z]*\)".*/\1/p')
             echo "poll ${i}: ${state}"

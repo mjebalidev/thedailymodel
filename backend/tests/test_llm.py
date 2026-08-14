@@ -5,6 +5,7 @@ from app.pipeline.llm import (
     GeminiLLM,
     LLMError,
     _classify,
+    _DailyQuotaExhausted,
     _ModelUnavailable,
     _TransientError,
     get_llm,
@@ -26,9 +27,20 @@ def _chain(models: list[str]) -> GeminiLLM:
 
 
 class _CodedError(Exception):
-    def __init__(self, code: int):
-        super().__init__(f"error {code}")
+    def __init__(self, code: int, msg: str = ""):
+        super().__init__(msg or f"error {code}")
         self.code = code
+
+
+# Shape of the real Gemini free-tier daily-quota 429 (seen in prod 2026-08-14).
+_DAILY_QUOTA_MSG = (
+    "429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+    "generativelanguage.googleapis.com/generate_content_free_tier_requests, "
+    "quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+)
+_MINUTE_QUOTA_MSG = (
+    "429 RESOURCE_EXHAUSTED. quotaId: GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+)
 
 
 def test_classify_by_status_code():
@@ -43,6 +55,33 @@ def test_classify_by_message_and_unknown_default():
     assert isinstance(_classify(Exception("RESOURCE_EXHAUSTED: quota")), _TransientError)
     # Unknown errors stay transient so the chain still advances.
     assert isinstance(_classify(Exception("something odd")), _TransientError)
+
+
+def test_classify_daily_vs_minute_quota():
+    # Per-day quota: dead until the provider's daily reset -> skip for the run.
+    assert isinstance(_classify(_CodedError(429, _DAILY_QUOTA_MSG)), _DailyQuotaExhausted)
+    assert isinstance(_classify(Exception(_DAILY_QUOTA_MSG)), _DailyQuotaExhausted)
+    # Per-minute quota: waiting helps -> stays transient (retried, not poisoned).
+    assert isinstance(_classify(_CodedError(429, _MINUTE_QUOTA_MSG)), _TransientError)
+    assert isinstance(_classify(Exception(_MINUTE_QUOTA_MSG)), _TransientError)
+
+
+def test_daily_quota_marks_model_dead_for_the_run():
+    llm = _chain(["flash", "flash-lite"])
+    calls: list[str] = []
+
+    def fake_call(model, prompt, schema):
+        calls.append(model)
+        if model == "flash":
+            raise _DailyQuotaExhausted(_DAILY_QUOTA_MSG)
+        return _Out(text=model)
+
+    llm._call_one = fake_call
+    assert llm.generate_structured("p", _Out).text == "flash-lite"
+    assert "flash" in llm._dead
+    # Next call goes straight to the fallback — no wasted retries on flash.
+    llm.generate_structured("p", _Out)
+    assert calls == ["flash", "flash-lite", "flash-lite"]
 
 
 def test_unavailable_model_is_skipped_permanently():
