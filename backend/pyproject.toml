@@ -2,7 +2,7 @@
 name = "ai-news-backend"
 version = "0.1.0"
 description = "AI News — daily AI newspaper backend (research agent -> analysis -> editorial -> API)"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
