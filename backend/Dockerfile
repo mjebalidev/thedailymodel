@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# uv-based image (ships uv + Python 3.12) — deterministic builds for Coolify.
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# uv-based image (ships uv + Python 3.14) — deterministic builds for Coolify.
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 
 WORKDIR /app
 
