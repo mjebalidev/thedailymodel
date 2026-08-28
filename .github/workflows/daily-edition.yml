@@ -1,8 +1,13 @@
 name: Daily Edition
 
 # Triggers the AI-news pipeline on the deployed backend.
-#  - schedule:         one edition every morning
+#  - schedule:         one edition every morning + a catch-up slot
 #  - workflow_dispatch: manual "Run workflow" button (with optional date)
+#
+# GitHub cron is best-effort: on-the-hour slots get skipped or delayed by
+# hours under load (both happened on 2026-08-27/28). Hence two off-peak
+# slots, and scheduled runs first check whether today's edition already
+# exists so a late or duplicate firing never regenerates it.
 #
 # Required repository secrets:
 #   API_BASE_URL    e.g. https://api.example.com   (no trailing slash)
@@ -12,7 +17,8 @@ name: Daily Edition
 
 on:
   schedule:
-    - cron: "0 4 * * *" # 04:00 UTC daily
+    - cron: "23 4 * * *" # 04:23 UTC daily (off-peak minute)
+    - cron: "23 6 * * *" # 06:23 UTC fallback — skips if today's edition exists
   workflow_dispatch:
     inputs:
       date:
@@ -31,7 +37,27 @@ jobs:
     environment: Production
     timeout-minutes: 35
     steps:
+      # Scheduled runs are skipped when today's edition is already published,
+      # so the fallback slot and late cron firings never regenerate an edition.
+      # Manual dispatch always runs (regenerating on purpose stays possible).
+      - name: Check for existing edition
+        id: check
+        if: github.event_name == 'schedule'
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          today=$(date -u +%Y-%m-%d)
+          latest=$(curl -fsS "${API_BASE_URL%/}/api/editions?limit=1" \
+            | sed -n 's/.*"date" *: *"\([0-9-]*\)".*/\1/p')
+          echo "today=${today} latest=${latest}"
+          if [ "${latest}" = "${today}" ]; then
+            echo "Edition for ${today} already published — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Trigger pipeline
+        if: steps.check.outputs.skip != 'true'
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           TRIGGER_SECRET: ${{ secrets.TRIGGER_SECRET }}
@@ -57,6 +83,7 @@ jobs:
           echo
 
       - name: Wait for completion
+        if: steps.check.outputs.skip != 'true'
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
