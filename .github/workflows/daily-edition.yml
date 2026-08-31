@@ -48,8 +48,8 @@ jobs:
         run: |
           set -euo pipefail
           today=$(date -u +%Y-%m-%d)
-          latest=$(curl -fsS "${API_BASE_URL%/}/api/editions?limit=1" \
-            | sed -n 's/.*"date" *: *"\([0-9-]*\)".*/\1/p')
+          latest=$(curl -fsS "${API_BASE_URL%/}/api/editions/latest" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("date",""))')
           echo "today=${today} latest=${latest}"
           if [ "${latest}" = "${today}" ]; then
             echo "Edition for ${today} already published — skipping."
