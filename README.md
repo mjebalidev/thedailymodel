@@ -83,9 +83,10 @@ mock** so an edition is always produced. `Edition.model` records what actually r
 | Relevance   | `app/pipeline/relevance.py`           | Agent scores each candidate for AI-news relevance and drops the noise (heuristic in mock). |
 | Scraping    | `app/pipeline/scraper.py`             | Fetches each *relevant* URL and extracts clean article text with trafilatura. |
 | Analysis    | `app/pipeline/analysis.py`            | LLM selects / clusters / categorizes / ranks stories (heuristic in mock). |
+| Archive     | `app/pipeline/archive.py`             | Embeds each story and finds the closest articles from earlier editions; the editor may cite them (skipped in mock). |
 | Editorial   | `app/pipeline/editorial.py`           | LLM writes the masthead intro + each article body (templated in mock). |
 | Translation | `app/pipeline/translation.py`         | Agent translates the edition into the non-base languages (no-op in mock). |
-| Persist     | `app/pipeline/orchestrator.py`        | Saves one `Edition` (+ `Article`s, + i18n) per day, idempotently; then purges editions older than `RETENTION_DAYS`. |
+| Persist     | `app/pipeline/orchestrator.py`        | Saves one `Edition` (+ `Article`s with their embedding, + i18n) per day, idempotently, and every discovered candidate (kept or dropped) in the `candidate` table; then purges editions older than `RETENTION_DAYS`. |
 | Display     | `frontend/src/`                       | Fetches `/api/editions/*?lang=` and renders the newspaper. |
 
 ## Triggering the pipeline
@@ -126,6 +127,11 @@ uv run python -m app.cli discover --scrape
 # Dump everything to JSON for deeper review
 uv run python -m app.cli discover --json /tmp/discovery.json
 ```
+
+**Past coverage** — `RELATED_PER_STORY` and `RELATED_MIN_SIMILARITY` (cosine,
+0-1) control how many earlier articles the editor is shown per story. Articles
+are embedded when their edition is saved; to embed ones that predate the
+feature, or that failed to embed, run `uv run python -m app.cli embed`.
 
 In production, run the same command from the **Coolify container Terminal**. The
 `--scrape` flag is the quickest way to spot pages where extraction failed
