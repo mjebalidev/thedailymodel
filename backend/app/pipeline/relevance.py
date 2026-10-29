@@ -119,6 +119,7 @@ def filter_relevant(
     kept: list[Candidate] = []
     for sc in scored:
         sc.candidate.relevance = sc.score
+        sc.candidate.relevance_reason = sc.reason
         if sc.keep:
             kept.append(sc.candidate)
 

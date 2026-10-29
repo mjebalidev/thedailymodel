@@ -16,6 +16,7 @@ class Candidate(BaseModel):
     published: datetime | None = None
     content: str = ""  # filled in by the scraper (main article text, truncated)
     relevance: int | None = None  # 0-100, set by the relevance filter
+    relevance_reason: str = ""
 
     @property
     def has_content(self) -> bool:

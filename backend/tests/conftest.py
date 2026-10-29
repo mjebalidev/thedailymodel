@@ -19,7 +19,7 @@ from sqlmodel import Session, delete  # noqa: E402
 
 from app.db import engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Article, Edition  # noqa: E402
+from app.models import Article, CandidateRecord, Edition  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -33,6 +33,7 @@ def session(_db: None):
     with Session(engine) as s:
         s.exec(delete(Article))
         s.exec(delete(Edition))
+        s.exec(delete(CandidateRecord))
         s.commit()
         yield s
 

@@ -44,3 +44,27 @@ class Article(SQLModel, table=True):
     i18n_json: str = "{}"
 
     edition: Optional[Edition] = Relationship(back_populates="articles")
+
+
+class CandidateRecord(SQLModel, table=True):
+    """Every candidate a run discovered, kept or dropped, as a raw corpus.
+
+    Not linked to Edition by foreign key so the retention purge never touches it.
+    """
+
+    __tablename__ = "candidate"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    edition_date: str = Field(index=True)
+    url: str = Field(index=True)
+    title: str
+    publisher: str = ""
+    origin: str = "rss"
+    snippet: str = ""
+    published: Optional[datetime] = None
+    content: str = ""
+    relevance: Optional[int] = None
+    relevance_reason: str = ""
+    # Passed the relevance filter / ended up as a source of a published article.
+    kept: bool = False
+    selected: bool = False

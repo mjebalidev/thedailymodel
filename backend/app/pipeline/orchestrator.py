@@ -4,12 +4,14 @@ import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, select
 
-from ..models import Article, Edition
+from ..models import Article, CandidateRecord, Edition
 from ..config import settings
 from . import analysis, discovery, editorial, relevance, scraper, translation
+from .editorial import EditionDraft
 from .llm import get_llm
+from .types import Candidate
 
 log = logging.getLogger("pipeline")
 
@@ -29,10 +31,10 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
     llm = get_llm()
 
     # 1. Research agent — discover candidate articles.
-    candidates = discovery.discover_candidates()
+    discovered = discovery.discover_candidates()
 
     # 2. Relevance agent — drop the noise before spending time scraping.
-    candidates = relevance.filter_relevant(llm, candidates)
+    candidates = relevance.filter_relevant(llm, discovered)
 
     # 3. Scrape full article text of the relevant ones (best-effort, browser-free).
     scraper.enrich(candidates)
@@ -85,6 +87,8 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
     session.commit()
     session.refresh(edition)
 
+    save_candidates(session, date_str, discovered, candidates, draft)
+
     # 7. Retention — keep the archive (and the DB) bounded.
     purged = purge_old_editions(session, date_str)
     if purged:
@@ -98,6 +102,40 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
         model_label,
     )
     return edition
+
+
+def save_candidates(
+    session: Session,
+    date_str: str,
+    discovered: list[Candidate],
+    kept: list[Candidate],
+    draft: EditionDraft,
+) -> None:
+    """Keep the whole day's discovery (dropped noise included) as a raw corpus.
+
+    Replaces any rows from an earlier run for the same date, like the edition itself.
+    """
+    kept_urls = {c.url for c in kept}
+    selected_urls = {s.url for a in draft.articles for s in a.sources}
+    session.exec(delete(CandidateRecord).where(CandidateRecord.edition_date == date_str))
+    for c in discovered:
+        session.add(
+            CandidateRecord(
+                edition_date=date_str,
+                url=c.url,
+                title=c.title,
+                publisher=c.publisher,
+                origin=c.origin,
+                snippet=c.snippet,
+                published=c.published,
+                content=c.content,
+                relevance=c.relevance,
+                relevance_reason=c.relevance_reason,
+                kept=c.url in kept_urls,
+                selected=c.url in selected_urls,
+            )
+        )
+    session.commit()
 
 
 def purge_old_editions(session: Session, today: str, days: int | None = None) -> int:
