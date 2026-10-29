@@ -20,6 +20,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
+  // Article to scroll to once its edition has rendered (a "Previously" link).
+  const [focusId, setFocusId] = useState<number | null>(null);
+
+  const openArticle = useCallback((date: string, id: number) => {
+    setSelectedDate(date);
+    setFocusId(id);
+  }, []);
 
   const fetchView = useCallback(async () => {
     setLoading(true);
@@ -49,6 +56,12 @@ export default function App() {
       document.title = `${edition.title || "The Daily Model"} — ${formatLongDate(edition.date, lang)}`;
     }
   }, [edition, lang]);
+
+  useEffect(() => {
+    if (loading || focusId === null) return;
+    document.getElementById(`article-${focusId}`)?.scrollIntoView({ behavior: "smooth" });
+    setFocusId(null);
+  }, [loading, focusId, edition]);
 
   const articles = edition?.articles ?? [];
   const present = new Set(articles.map((a) => a.category));
@@ -130,12 +143,12 @@ export default function App() {
                 </p>
               )}
 
-              {lead && <LeadStory article={lead} />}
+              {lead && <LeadStory article={lead} onOpenRelated={openArticle} />}
 
               {river.length > 0 ? (
                 <div className="story-river md:columns-2 lg:columns-3 md:gap-8 lg:gap-10">
                   {river.map((a) => (
-                    <ArticleCard key={a.id} article={a} />
+                    <ArticleCard key={a.id} article={a} onOpenRelated={openArticle} />
                   ))}
                 </div>
               ) : (

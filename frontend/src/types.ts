@@ -4,6 +4,12 @@ export interface Source {
   publisher: string;
 }
 
+export interface RelatedArticle {
+  id: number;
+  date: string;
+  headline: string;
+}
+
 export interface Article {
   id: number;
   rank: number;
@@ -13,6 +19,7 @@ export interface Article {
   body: string;
   importance: number;
   sources: Source[];
+  related?: RelatedArticle[];
 }
 
 export interface EditionSummary {

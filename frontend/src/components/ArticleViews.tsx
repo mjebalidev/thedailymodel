@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import type { Article } from "../types";
-import { hostname } from "../lib/format";
+import { formatShortDate, hostname } from "../lib/format";
 import { useI18n } from "../i18n";
 
 function Kicker({ article }: { article: Article }) {
@@ -52,9 +52,45 @@ function Sources({ article }: { article: Article }) {
   );
 }
 
-export function LeadStory({ article }: { article: Article }) {
+export type OpenArticle = (date: string, id: number) => void;
+
+function Related({ article, onOpen }: { article: Article; onOpen: OpenArticle }) {
+  const { t, lang } = useI18n();
+  if (!article.related?.length) return null;
   return (
-    <article className="pb-6 mb-8 border-b-2 border-[var(--ink)]">
+    <div className="mt-2">
+      <span className="kicker text-[11px] text-[var(--muted)]">{t("previously")} </span>
+      {article.related.map((r, i) => (
+        <span key={r.id} className="text-xs">
+          {i > 0 && <span className="text-[var(--muted)]"> · </span>}
+          <a
+            href={`#article-${r.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              onOpen(r.date, r.id);
+            }}
+            className="text-[var(--accent)] hover:underline"
+          >
+            <span className="text-[var(--muted)]">{formatShortDate(r.date, lang)} — </span>
+            {r.headline}
+          </a>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+interface StoryProps {
+  article: Article;
+  onOpenRelated: OpenArticle;
+}
+
+export function LeadStory({ article, onOpenRelated }: StoryProps) {
+  return (
+    <article
+      id={`article-${article.id}`}
+      className="pb-6 mb-8 border-b-2 border-[var(--ink)] scroll-mt-4"
+    >
       <Kicker article={article} />
       <h2 className="headline text-[1.75rem] leading-[1.08] sm:text-4xl lg:text-5xl font-black mb-2">
         {article.headline}
@@ -66,13 +102,17 @@ export function LeadStory({ article }: { article: Article }) {
         <ReactMarkdown>{article.body}</ReactMarkdown>
       </div>
       <Sources article={article} />
+      <Related article={article} onOpen={onOpenRelated} />
     </article>
   );
 }
 
-export function ArticleCard({ article }: { article: Article }) {
+export function ArticleCard({ article, onOpenRelated }: StoryProps) {
   return (
-    <article className="break-inside-avoid mb-6 pb-6 border-b border-[var(--rule)] last:border-0">
+    <article
+      id={`article-${article.id}`}
+      className="break-inside-avoid mb-6 pb-6 border-b border-[var(--rule)] last:border-0 scroll-mt-4"
+    >
       <Kicker article={article} />
       <h3 className="headline text-[1.35rem] leading-snug font-bold mb-1">{article.headline}</h3>
       {article.dek && (
@@ -82,6 +122,7 @@ export function ArticleCard({ article }: { article: Article }) {
         <ReactMarkdown>{article.body}</ReactMarkdown>
       </div>
       <Sources article={article} />
+      <Related article={article} onOpen={onOpenRelated} />
     </article>
   );
 }
