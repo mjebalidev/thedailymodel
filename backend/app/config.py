@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
     related_per_story: int = 3
-    related_min_similarity: float = 0.75
+    related_min_similarity: float = 0.85
 
     # Trigger / scheduler
     trigger_secret: str = ""
