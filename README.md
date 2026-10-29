@@ -174,8 +174,9 @@ The pipeline is intentionally provider-agnostic:
   pages → LLM-ready markdown) in `scraper.py`.
 - **Tune coverage** — `LOOKBACK_HOURS`, `MAX_CANDIDATES`, `MAX_ARTICLES` in `.env`.
 - **Add/remove sources** — edit `RSS_FEEDS` in `app/pipeline/sources.py`.
-- **Bound the archive** — `RETENTION_DAYS` (default 365, `0` = keep everything):
-  editions older than the window are purged after each run. Manual purge:
+- **Bound the archive** — `RETENTION_DAYS` (default `0` = keep everything):
+  editions older than the window are purged after each run, and can no longer
+  be cited as past coverage. Manual purge:
   `uv run python -m app.cli cleanup [--days N]`.
 
 ## Development & CI
