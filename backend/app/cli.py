@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 
 from sqlmodel import Session, select
 
@@ -106,7 +107,17 @@ def _cmd_embed(args: argparse.Namespace) -> None:
     init_db()
     with Session(engine) as session:
         todo = list(session.exec(select(Article).where(Article.embedding.is_(None))).all())
-        n = archive.embed_articles(llm, session, todo)
+        n = 0
+        # The free tier counts each text as one request, 100 per minute: send a
+        # minute's worth at a time and commit it, so a failure keeps the progress.
+        for start in range(0, len(todo), 100):
+            if start:
+                time.sleep(61)
+            done = archive.embed_articles(llm, session, todo[start : start + 100])
+            n += done
+            print(f"  {n}/{len(todo)}", flush=True)
+            if not done:
+                break
     print(f"✓ Embedded {n}/{len(todo)} article(s).")
     if n < len(todo):
         raise SystemExit(1)
