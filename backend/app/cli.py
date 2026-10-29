@@ -7,6 +7,10 @@
         Run ONLY discovery (+ optional scraping) and print what the research
         agent found — to inspect relevance/veracity of the collected data.
 
+    uv run python -m app.cli embed
+        Embed every stored article that has no embedding yet (backfill for
+        archive retrieval, or a retry after an embedding failure).
+
     uv run python -m app.cli cleanup [--days N]
         Purge editions older than the retention window (RETENTION_DAYS).
 """
@@ -16,12 +20,13 @@ from __future__ import annotations
 import argparse
 import json
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from datetime import datetime, timezone
 
 from .db import engine, init_db
-from .pipeline import discovery, relevance, scraper
+from .models import Article
+from .pipeline import archive, discovery, relevance, scraper
 from .pipeline.llm import get_llm
 from .pipeline.orchestrator import purge_old_editions, run_pipeline
 
@@ -93,6 +98,20 @@ def _cmd_discover(args: argparse.Namespace) -> None:
         print(f"\n→ Full data written to {args.json}")
 
 
+def _cmd_embed(args: argparse.Namespace) -> None:
+    llm = get_llm()
+    if llm is None:
+        print("Embedding needs the live LLM (GEMINI_API_KEY set, USE_MOCK_LLM=false).")
+        raise SystemExit(1)
+    init_db()
+    with Session(engine) as session:
+        todo = list(session.exec(select(Article).where(Article.embedding.is_(None))).all())
+        n = archive.embed_articles(llm, session, todo)
+    print(f"✓ Embedded {n}/{len(todo)} article(s).")
+    if n < len(todo):
+        raise SystemExit(1)
+
+
 def _cmd_cleanup(args: argparse.Namespace) -> None:
     from .config import settings
 
@@ -153,6 +172,9 @@ def main() -> None:
     )
     p_disc.add_argument("--json", metavar="PATH", help="Also dump full candidate data as JSON.")
     p_disc.set_defaults(func=_cmd_discover)
+
+    p_embed = sub.add_parser("embed", help="Embed stored articles that have no embedding.")
+    p_embed.set_defaults(func=_cmd_embed)
 
     p_clean = sub.add_parser("cleanup", help="Purge editions older than the retention window.")
     p_clean.add_argument(

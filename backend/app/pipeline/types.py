@@ -58,6 +58,10 @@ class WrittenArticle(BaseModel):
     headline: str
     dek: str = Field(description="A one-sentence standfirst under the headline.")
     body: str = Field(description="2-4 short paragraphs, neutral journalistic tone, markdown.")
+    related_ids: list[int] = Field(
+        default_factory=list,
+        description="Ids from this story's PREVIOUS COVERAGE that you referenced (may be empty).",
+    )
 
 
 class WrittenEdition(BaseModel):

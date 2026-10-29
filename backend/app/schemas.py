@@ -10,6 +10,12 @@ class SourceOut(BaseModel):
     publisher: str = ""
 
 
+class RelatedOut(BaseModel):
+    id: int
+    date: str
+    headline: str
+
+
 class ArticleOut(BaseModel):
     id: int
     rank: int
@@ -19,6 +25,7 @@ class ArticleOut(BaseModel):
     body: str
     importance: int
     sources: list[SourceOut]
+    related: list[RelatedOut] = []
 
 
 class EditionSummary(BaseModel):

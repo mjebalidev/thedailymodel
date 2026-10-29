@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     languages: str = "en,fr,de"
     enable_translation: bool = True
 
+    # Archive retrieval: show the editor past articles on the same subject so
+    # it can reference them. Needs the live LLM (embeddings come from Gemini).
+    enable_related: bool = True
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dim: int = 768
+    related_per_story: int = 3
+    related_min_similarity: float = 0.75
+
     # Trigger / scheduler
     trigger_secret: str = ""
     enable_scheduler: bool = False

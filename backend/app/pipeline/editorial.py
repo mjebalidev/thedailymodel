@@ -5,6 +5,7 @@ import logging
 from pydantic import BaseModel
 
 from .analysis import Story
+from .archive import PastArticle
 from .llm import GeminiLLM
 from .types import WrittenEdition
 
@@ -25,6 +26,7 @@ class DraftArticle(BaseModel):
     dek: str
     body: str
     sources: list[SourceRef]
+    related_ids: list[int] = []
 
 
 class EditionDraft(BaseModel):
@@ -65,12 +67,18 @@ def _write_mock(stories: list[Story]) -> EditionDraft:
     return EditionDraft(title="The Daily Model", intro=intro, articles=articles)
 
 
-def _build_prompt(stories: list[Story]) -> str:
+def _build_prompt(stories: list[Story], related: list[list[PastArticle]]) -> str:
     lines = [
         "You are writing today's edition of a daily AI newspaper.",
         "Write a short editor's note (intro) and one article per story below.",
         "Tone: neutral, factual, journalistic. Do NOT invent facts beyond the sources.",
         "For each article echo back its integer `ref`. Body: 2-4 short markdown paragraphs.",
+        "",
+        "Some stories list PREVIOUS COVERAGE: articles this newspaper already published",
+        "that may be on the same subject. If one is genuinely the same subject (a",
+        "follow-up, a new version, a reaction), you may refer to it in the body by its",
+        "date (e.g. 'as we reported on 14 September') and put its id in `related_ids`.",
+        "Ignore loosely related ones. Only use ids listed under that same story.",
         "",
         "STORIES:",
     ]
@@ -82,11 +90,19 @@ def _build_prompt(stories: list[Story]) -> str:
             f"Headline source: {c.title} ({c.publisher})\n"
             f"Content:\n{content}\n"
         )
+        if related[i]:
+            lines.append("PREVIOUS COVERAGE:")
+            lines.extend(f"- id {p.id} — {p.date}: {p.headline} — {p.dek}" for p in related[i])
+            lines.append("")
     return "\n".join(lines)
 
 
-def _write_live(llm: GeminiLLM, stories: list[Story]) -> EditionDraft:
-    written: WrittenEdition = llm.generate_structured(_build_prompt(stories), WrittenEdition)
+def _write_live(
+    llm: GeminiLLM, stories: list[Story], related: list[list[PastArticle]]
+) -> EditionDraft:
+    written: WrittenEdition = llm.generate_structured(
+        _build_prompt(stories, related), WrittenEdition
+    )
     by_ref = {w.ref: w for w in written.articles}
 
     articles: list[DraftArticle] = []
@@ -107,6 +123,9 @@ def _write_live(llm: GeminiLLM, stories: list[Story]) -> EditionDraft:
                 )
             )
             continue
+        # Drop ids the model invented or took from another story.
+        offered = {p.id for p in related[rank]}
+        related_ids = list(dict.fromkeys(i for i in w.related_ids if i in offered))
         articles.append(
             DraftArticle(
                 rank=rank,
@@ -116,6 +135,7 @@ def _write_live(llm: GeminiLLM, stories: list[Story]) -> EditionDraft:
                 dek=w.dek.strip() or story.angle,
                 body=w.body.strip(),
                 sources=_sources_for(story),
+                related_ids=related_ids,
             )
         )
     title = written.edition_title.strip() or "The Daily Model"
@@ -124,7 +144,11 @@ def _write_live(llm: GeminiLLM, stories: list[Story]) -> EditionDraft:
     return EditionDraft(title=title, intro=intro, articles=articles)
 
 
-def write_edition(llm: GeminiLLM | None, stories: list[Story]) -> EditionDraft:
+def write_edition(
+    llm: GeminiLLM | None,
+    stories: list[Story],
+    related: list[list[PastArticle]] | None = None,
+) -> EditionDraft:
     if not stories:
         return EditionDraft(
             title="The Daily Model",
@@ -134,7 +158,7 @@ def write_edition(llm: GeminiLLM | None, stories: list[Story]) -> EditionDraft:
     if llm is None:
         return _write_mock(stories)
     try:
-        return _write_live(llm, stories)
+        return _write_live(llm, stories, related or [[] for _ in stories])
     except Exception as exc:
         log.warning("Editorial LLM call failed, using mock: %s", exc)
         return _write_mock(stories)

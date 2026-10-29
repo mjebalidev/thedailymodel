@@ -121,6 +121,34 @@ class GeminiLLM:
             # A malformed body is worth one retry, then move on.
             raise _TransientError(f"unparseable response from {model}: {exc}") from exc
 
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=20),
+        retry=retry_if_exception_type(_TransientError),
+    )
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        try:
+            resp = self._client.models.embed_content(
+                model=settings.embedding_model,
+                contents=texts,
+                config={
+                    "task_type": "SEMANTIC_SIMILARITY",
+                    "output_dimensionality": settings.embedding_dim,
+                },
+            )
+        except Exception as exc:
+            raise _classify(exc) from exc
+        return [list(e.values) for e in resp.embeddings]
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed texts with the single embedding model (no fallback chain: vectors
+        from different models can't be compared). Raises once retries are spent."""
+        out: list[list[float]] = []
+        for i in range(0, len(texts), 100):  # API limit per request
+            out.extend(self._embed_batch(texts[i : i + 100]))
+        return out
+
     def generate_structured(self, prompt: str, schema: type[T]) -> T:
         for model in self._models:
             if model in self._dead:

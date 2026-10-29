@@ -8,7 +8,7 @@ from sqlmodel import Session, func, select
 from ..config import settings
 from ..db import get_session
 from ..models import Article, Edition
-from ..schemas import ArticleOut, EditionOut, EditionSummary, SourceOut
+from ..schemas import ArticleOut, EditionOut, EditionSummary, RelatedOut, SourceOut
 
 router = APIRouter(prefix="/api/editions", tags=["editions"])
 
@@ -34,7 +34,29 @@ def _to_summary(e: Edition, lang: str, article_count: int | None = None) -> Edit
     )
 
 
-def _to_out(e: Edition, lang: str) -> EditionOut:
+def _related_lookup(session: Session, e: Edition, lang: str) -> dict[int, RelatedOut]:
+    """Resolve every past article referenced by this edition in one query.
+    Ids whose edition was since purged or regenerated simply drop out."""
+    ids = {i for a in e.articles for i in json.loads(a.related_json or "[]")}
+    if not ids:
+        return {}
+    rows = session.exec(
+        select(Article.id, Article.headline, Article.i18n_json, Edition.date)
+        .join(Edition)
+        .where(Article.id.in_(ids))
+    ).all()
+    return {
+        r.id: RelatedOut(
+            id=r.id,
+            date=r.date,
+            headline=json.loads(r.i18n_json or "{}").get(lang, {}).get("headline") or r.headline,
+        )
+        for r in rows
+    }
+
+
+def _to_out(session: Session, e: Edition, lang: str) -> EditionOut:
+    related = _related_lookup(session, e, lang)
     articles = []
     for a in sorted(e.articles, key=lambda a: a.rank):
         tr = json.loads(a.i18n_json or "{}").get(lang, {})
@@ -48,6 +70,9 @@ def _to_out(e: Edition, lang: str) -> EditionOut:
                 body=tr.get("body") or a.body,
                 importance=a.importance,
                 sources=[SourceOut(**s) for s in json.loads(a.sources_json or "[]")],
+                related=[
+                    related[i] for i in json.loads(a.related_json or "[]") if i in related
+                ],
             )
         )
     return EditionOut(
@@ -84,7 +109,7 @@ def latest_edition(
     edition = session.exec(select(Edition).order_by(Edition.date.desc())).first()
     if edition is None:
         raise HTTPException(status_code=404, detail="No edition has been generated yet.")
-    return _to_out(edition, lang)
+    return _to_out(session, edition, lang)
 
 
 @router.get("/{date}", response_model=EditionOut)
@@ -97,4 +122,4 @@ def get_edition(
     edition = session.exec(select(Edition).where(Edition.date == date)).first()
     if edition is None:
         raise HTTPException(status_code=404, detail=f"No edition for {date}.")
-    return _to_out(edition, lang)
+    return _to_out(session, edition, lang)

@@ -8,7 +8,7 @@ from sqlmodel import Session, delete, select
 
 from ..models import Article, CandidateRecord, Edition
 from ..config import settings
-from . import analysis, discovery, editorial, relevance, scraper, translation
+from . import analysis, archive, discovery, editorial, relevance, scraper, translation
 from .editorial import EditionDraft
 from .llm import get_llm
 from .types import Candidate
@@ -41,7 +41,8 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
 
     # 4 & 5. Analysis + editorial (Gemini, or deterministic mock).
     stories = analysis.analyze(llm, candidates)
-    draft = editorial.write_edition(llm, stories)
+    related = archive.find_related(llm, session, stories, date_str)
+    draft = editorial.write_edition(llm, stories, related)
 
     # 6. Translation agent — render the edition into the other languages.
     target_langs = settings.target_languages if settings.enable_translation else []
@@ -82,10 +83,12 @@ def run_pipeline(session: Session, date_str: str | None = None) -> Edition:
                 importance=a.importance,
                 sources_json=json.dumps([s.model_dump() for s in a.sources]),
                 i18n_json=json.dumps(articles_i18n[i], ensure_ascii=False),
+                related_json=json.dumps(a.related_ids),
             )
         )
     session.commit()
     session.refresh(edition)
+    archive.embed_articles(llm, session, list(edition.articles))
 
     save_candidates(session, date_str, discovered, candidates, draft)
 

@@ -42,6 +42,10 @@ class Article(SQLModel, table=True):
     sources_json: str = "[]"  # JSON list of {title, url, publisher}
     # {lang: {"headline": ..., "dek": ..., "body": ...}} for non-base languages.
     i18n_json: str = "{}"
+    # JSON list of past Article ids this article references.
+    related_json: str = "[]"
+    # Normalized float32 vector of headline + dek + body, for archive retrieval.
+    embedding: Optional[bytes] = None
 
     edition: Optional[Edition] = Relationship(back_populates="articles")
 
