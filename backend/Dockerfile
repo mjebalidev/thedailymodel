@@ -2,6 +2,11 @@
 # uv-based image (ships uv + Python 3.14) — deterministic builds for Coolify.
 FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim
 
+# Debian publishes security fixes before the base image is rebuilt, and the
+# system pip (with its vendored urllib3 and msgpack) is unused: uv manages the venv.
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip
+
 WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1 \
