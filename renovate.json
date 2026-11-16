@@ -23,6 +23,13 @@
     {
       "matchUpdateTypes": ["major"],
       "labels": ["renovate", "major"]
+    },
+    {
+      "description": "A Python runtime bump needs its own build check, not the minor group",
+      "matchDepNames": ["python"],
+      "matchUpdateTypes": ["minor", "major"],
+      "groupName": "python runtime",
+      "labels": ["renovate", "runtime"]
     }
   ],
   "osvVulnerabilityAlerts": true,
